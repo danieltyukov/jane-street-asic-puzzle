@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+
+      - name: Cache the SKY130 library
+        uses: actions/cache@v4
+        with:
+          path: pdk
+          key: sky130-hd-${{ hashFiles('Makefile') }}
+
+      - name: Set up
+        run: make setup pdk
+
+      - name: Tests
+        run: make test
+
+      - name: Full solve
+        run: make all
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: |
+            build/results.json
+            build/results.log
+            build/puzzle_extracted.v
+            build/solution.vcd
