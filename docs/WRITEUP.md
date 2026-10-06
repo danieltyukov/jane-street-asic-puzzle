@@ -69,31 +69,29 @@ Only after both of those passed did the extractor touch the puzzle.
 
 [`extract.py`](../src/asicre/extract.py) builds connectivity from geometry, then attaches pins.
 
-**Copper.** For each routing layer (li1 and met1 to met5), flatten every shape in the design into one
-region, include the pin shapes, and merge. After merging, one polygon is one piece of continuous metal.
-On the puzzle that is 6680 li1 polygons, 3001 on met1, 2060 on met2, 811 on met3, 45 on met4 and 18 on
+Start with the copper. For each routing layer (li1 and met1 to met5), flatten every shape in the
+design into one region, include the pin shapes, and merge. After merging, one polygon is one piece of
+continuous metal. On the puzzle that is 6680 li1 polygons, 3001 on met1, 2060 on met2, 811 on met3, 45 on met4 and 18 on
 met5.
 
-**Vias.** Each cut shape (mcon, via1 to via4) sits inside a polygon on the layer below and a polygon on
-the layer above. Look both up by the via's centre and join them in a union-find. A bucket grid over the
-polygon bounding boxes keeps the lookups fast. There are 33,323 cuts. If a cut has nothing above or
+Then the vias. Each cut shape (mcon, via1 to via4) sits inside a polygon on the layer below and a
+polygon on the layer above. Look both up by the via's centre and join them in a union-find. A bucket
+grid over the polygon bounding boxes keeps the lookups fast. There are 33,323 cuts. If a cut has nothing above or
 below it, that is a red flag; there are none.
 
-**Names.** The top cell has text labels on met3 (the I/O pins) and met4/met5 (VPWR, VGND). Any net
+The top cell has text labels on met3 (the I/O pins) and met4/met5 (VPWR, VGND). Any net
 that contains a labelled polygon gets that name.
 
-**Pins.** Every standard cell master has labels like `A`, `B`, `Y` on li1 and `VPWR`/`VGND` on met1.
-For each placed instance, transform each label position by the instance transform and find the
+Pins come last. Every standard cell master has labels like `A`, `B`, `Y` on li1 and `VPWR`/`VGND` on
+met1. For each placed instance, transform each label position by the instance transform and find the
 polygon under it. Its net is the pin's net. Some pins have several labels; they must all agree, and on
 this chip they always do.
 
-Two things went wrong on the first try, both worth knowing about:
-
-- The tap cell (`tapvpwrvgnd_1`) has no `prBoundary` shape, so its bounding box is the well layer, which
-  is wider than the cell. Matching against the DEF failed for exactly the 93 tap cells until the
-  placement box came from the met1 rails instead.
-- Body labels (`VPB`, `VNB`) sit on the well layers. They are not routing and are tied to the rails by
-  the tap cells, so they are left out.
+One thing went wrong on the first try. The tap cell (`tapvpwrvgnd_1`) has no `prBoundary` shape, so
+its bounding box comes from the well layer, which is wider than the cell. Matching against the DEF
+failed for exactly the 93 tap cells until the placement box came from the met1 rails instead. Body
+labels (`VPB`, `VNB`) are skipped on purpose: they sit on the well layers, not on routing, and the tap
+cells tie them to the rails.
 
 Why stop at li1 and not follow contacts down into the transistors? Because diffusion would join source
 to drain through every transistor, and nets would merge through the cells. Poly is safe to follow, and
@@ -105,22 +103,22 @@ with no reset), and two input pins whose net has no driver.
 
 ## 4. A simulator you can trust
 
-**Cell behaviour** comes from the Liberty timing file. Each output pin has a `function` such as
+Cell behaviour comes from the Liberty timing file. Each output pin has a `function` such as
 `(!A1&!B1) | (!A2&!B1) | (!A3&!B1)` (that is `a31oi`), and each flop has an `ff` group naming its clock,
 next state and async clear or preset. [`liberty.py`](../src/asicre/liberty.py) parses the 10 MB file
 once and caches the 428 cells as JSON.
 
-**Structure.** All 92 flops must be clocked from `clk` through buffers only; the simulator checks this
+All 92 flops must be clocked from `clk` through buffers only; the simulator checks this
 by walking back from every clock pin and refuses to run otherwise. The 642 combinational gates are
 sorted topologically (the longest path between flops is 14 gates) and the whole sorted list becomes one generated
 Python function.
 
-**Bit-parallel lanes.** Each net is a Python integer and bit k of it is the value in simulation k.
+The part that makes everything else cheap: each net is a Python integer and bit k of it is the value in simulation k.
 `a AND b` is `a & b`, `NOT a` is `~a` (masked at the end). One evaluation of the netlist therefore runs
 as many independent simulations as you like, which is what makes the experiments in the next section
 cheap.
 
-**A cycle** is: apply inputs, settle the logic, apply async resets, then on the clock edge every flop
+One clock cycle goes like this: apply inputs, settle the logic, apply async resets, then on the clock edge every flop
 takes its D. Inputs change on the falling edge and outputs are compared after the rising edge, which is
 the convention in the sample VCD.
 
@@ -140,6 +138,7 @@ one is checked three ways:
 ### The impulse-response experiment
 
 The cheapest question you can ask a sequential circuit is "what changes if I flip one input bit?".
+This experiment is the part of the solve most worth stealing for other chips.
 With 122 lanes: lane p puts a single star at board position p, lane 121 puts none. After 121 input
 cycles, XOR every flop with the empty lane. The positions that flipped a flop are what that flop
 "hears". Keeping a second record of every position that flipped it at any time during the run
@@ -173,19 +172,19 @@ regions have two" check.
 The 49 flops that hear nothing are easiest to read from their waveforms in the empty lane
 (`u852` is the low bit of the column index, toggling every cycle and wrapping at 10):
 
-- **Position counters.** A 4-bit column index counting 0 to 10, a 4-bit row index that steps when the
+- The position counters are a 4-bit column index counting 0 to 10, a 4-bit row index that steps when the
   column wraps, and a done flag that sets after the 121st input.
-- **Row check.** Rows arrive one after another, so the design keeps a single 2-bit counter (`u634`,
+- The row check is cheaper than eleven counters. Rows arrive one after another, so the design keeps a single 2-bit counter (`u634`,
   `u560`) that counts stars in the current row and clears at the end of each row, plus a sticky flag
   (`u517`) that sets when a row ends with a count other than 2. A board with two stars in row 0 and
   nothing else sets it at the end of row 1; three stars in row 0 sets it at the end of row 0.
-- **Adjacency check.** The 12-stage delay line holds the last 12 inputs. When a star arrives, its left
-  neighbour went in 1 cycle ago, and its upper-right, upper and upper-left neighbours went in 10, 11 and
+- The adjacency check is a 12-stage delay line that holds the last 12 inputs. When a star arrives, its
+  left neighbour went in 1 cycle ago, and its upper-right, upper and upper-left neighbours went in 10, 11 and
   12 cycles ago. That is every neighbour that has already been seen, so a 12-bit window is enough. A
   sticky flag (`u860`) sets on the first touching pair.
-- **Star counter.** A 7-bit binary count (`u331` is bit 0, then `u206`, `u248`, `u292`, `u185`,
+- The star counter is a 7-bit binary count (`u331` is bit 0, then `u206`, `u248`, `u292`, `u185`,
   `u225`, `u269`), enough for 0 to 121.
-- **Output generator.** Four `dfxtp` flops count the output bytes, three more hold the play state and
+- In the output generator, four `dfxtp` flops count the output bytes, three more hold the play state and
   the registered `success` output.
 
 ## 6. The solve
@@ -218,53 +217,66 @@ The results post says the solution string is stored XORed with a "checksum" of t
 LFSR. Everything below was recovered from simulation traces, using the eight flops the impulse
 experiment flagged as scrambled.
 
-**The chain.** Over 120 cycles of 16 random boards, flop B is the next stage after flop A if
+First, the chain. Over 120 cycles of 16 random boards, flop B is the next stage after flop A if
 B(t+1) == A(t) on every cycle in every lane. That gives one shift chain:
 `u1149 -> u1130 -> u1098 -> u1116 -> u1046 -> u1081 -> u1013 -> u1027`.
 
-**The feedback.** Trying all subsets of stages finds the head's next value is
+Next, the feedback. Trying all subsets of stages finds the head's next value is
 `I xor s3 xor s4 xor s5 xor s7`. That is the polynomial `x^8 + x^6 + x^5 + x^4 + 1`, the standard
 maximal-length 8-bit LFSR, period 255. With the board bit XORed in, the register ends up holding an
 8-bit signature of the board. The reset value is `0xa5` (four `dfstp` flops preset to 1, four `dfrtp`
 cleared to 0). A software model of the register gives the same signature as the simulated chip.
 
-**Playback.** Symbolically, once loading is done the register's next state is a linear map of its
-current state. That map is the loading map raised to the 8th power, so the register jumps 8 LFSR steps
+Playback works differently. Once loading is done, the register's next state is still a linear map of
+its current state, now without the input bit. That map is the loading map raised to the 8th power, so the register jumps 8 LFSR steps
 per output byte.
 
-**The ROM.** Forcing the `success` flop high after a wrong board makes the chip play gibberish, and
+To get the ROM, force the `success` flop high after a wrong board. The chip plays gibberish, and
 `output XOR state` gives the same 15 bytes for every board:
 `4d ad fb 83 13 79 1c b5 79 63 c7 68 93 f5 8f`. That is the encrypted message.
 
-**The crack.** The key is only 8 bits. Trying all 256 seeds and keeping the decodes that are all
+And the crack: the key is only 8 bits. Trying all 256 seeds and keeping the decodes that are all
 printable ASCII leaves exactly one: seed `0x65`, which decodes to `(* TWO STARS *)`. And `0x65` is the
 signature of the solved board. So the secret could be read without solving the puzzle, which is the
 attack the results post mentions.
 
 ## 9. Easter eggs
 
-**The waveform's hidden text.** The two failed attempts in `example_inputs.vcd` are 121-bit boards.
+### The waveform's hidden text
+
+The two failed attempts in `example_inputs.vcd` are 121-bit boards.
 Read each board row as a 7-bit character with bit 0 in the leftmost column (the last four columns are
 always 0). Eleven rows per attempt, two attempts: `The night sky awaits` and two trailing spaces.
 
-**The VCD header.** `$date Sat Dec 31 23:59:60 2016`. Second 60 does exist, once in a while: a leap
+### The VCD header
+
+`$date Sat Dec 31 23:59:60 2016`. Second 60 does exist, once in a while: a leap
 second was inserted at the end of 2016. Python's `datetime` refuses to parse it, which is a nice way to
 detect it. The `$version` line says to look at the file in a waveform viewer instead of reading it.
 
-**Morse code below the die.** The 36 custom cells sit in one row under the chip on layer 200. They come
+### Morse code below the die
+
+The 36 custom cells sit in one row under the chip on layer 200. They come
 in two widths, 1.38 um (`INTERNAL_3`) and 4.14 um (`INTERNAL_7`), exactly 1 and 3 units. The gaps are 1,
 3 and 7 units, the textbook spacing between symbols, letters and words. Decoded:
 `PER ARENAM AD ASTRA`, "through the sand to the stars", which fits a chip made from silicon.
 
-**The failure messages.** The empty board prints `EMPTY SKY`, the full board `BIG BANG`. A board that
+### The failure messages
+
+The empty board prints `EMPTY SKY`, the full board `BIG BANG`. A board that
 passes every count but has touching stars prints `TWO NOT TOUCH` (or `TWO"NOT TOUCH`, see below).
 Everything else, including a single star, prints `TRY AGAIN`. Sweeping the number of stars shows the
 star counter picks `EMPTY SKY` only at 0 and `BIG BANG` only at 121.
 
-**The logo.** The top cell has 1366 met2 boxes of exactly 0.3 x 0.3 um on a 0.3 um grid, connected to
+### The logo
+
+The top cell has 1366 met2 boxes of exactly 0.3 x 0.3 um on a 0.3 um grid, connected to
 nothing. Drawn as pixels they form a 57 x 57 Jane Street logo.
 
-**The letters.** Three of the eleven regions are drawn as J, S and C.
+### The letters
+
+Three of the eleven regions are drawn as J, S and C. You only notice once you colour
+them in, which is presumably the point.
 
 ## 10. The floating wire, properly
 

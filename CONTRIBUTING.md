@@ -1,10 +1,8 @@
 # Contributing
 
-Issues and pull requests are welcome, especially:
-
-- explanations that would have helped you when you were stuck
-- support for other GDS puzzles or other SKY130 libraries (`sky130_fd_sc_hs`, `_ms`, ...)
-- faster or clearer versions of any step
+Issues and pull requests are welcome. The most useful ones add an explanation that would have helped
+you when you were stuck, or point the tools at another GDS or another SKY130 library
+(`sky130_fd_sc_hs`, `_ms`, ...).
 
 ## Getting set up
 

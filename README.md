@@ -100,9 +100,10 @@ matched it with every tie cell wrong). So there are three checks:
 
 ### 3. Working out what it does
 
-The trick that cracks it open: run 122 simulations at once. Lane p places a single star at board
-position p, the last lane places none. At the end, compare every flip-flop to the empty lane. A flop
-that "heard" a star changed, and the set of positions it heard tells you its job.
+Most of the understanding came from one experiment. Run 122 simulations at once: lane p places a
+single star at board position p, and the last lane places none. At the end, compare every flip-flop
+to the empty lane. A flop that "heard" a star changed, and the set of positions it heard tells you
+its job.
 
 ![impulse response](docs/img/impulse.png)
 
@@ -142,14 +143,19 @@ the message one byte per cycle:
 
 ### 5. Two more ways in
 
-**SAT, without understanding anything.** [`src/asicre/sat.py`](src/asicre/sat.py) unrolls the netlist
-for 121 input cycles plus a few idle ones, gives every flop fresh variables each cycle, and asks z3 for
-an input sequence that makes `success` true. It finds one in a fraction of a second, proves there is no
-second one, and it is the same board.
+#### SAT, without understanding anything
 
-**Cracking the output generator.** While the board streams in, every bit is XORed into the feedback of
-an 8-bit LFSR, `x^8 + x^6 + x^5 + x^4 + 1` (the textbook maximal-length one, period 255). When the board
-is right, each output byte is `ROM[k] XOR state`, and the state jumps 8 steps per byte. Both facts are
+[`src/asicre/sat.py`](src/asicre/sat.py) unrolls the netlist for 121 input cycles plus a few idle
+ones, gives every flop fresh variables each cycle, and asks z3 for an input sequence that makes
+`success` true. It finds one in a fraction of a second, proves there is no second one, and it is the
+same board. It is the fastest route to the answer. It also teaches you nothing about the chip, which
+is why it is a cross-check here and not the main route.
+
+#### Cracking the output generator
+
+While the board streams in, every bit is XORed into the feedback of an 8-bit LFSR,
+`x^8 + x^6 + x^5 + x^4 + 1` (the textbook maximal-length one, period 255). When the board is right,
+each output byte is `ROM[k] XOR state`, and the state jumps 8 steps per byte. Both facts are
 recovered from traces, not read off gates. Faking `success` on a wrong board gives the 15 ROM bytes;
 trying all 256 seeds gives exactly one printable decode, and its seed (`0x65`) is the signature of the
 solved board.
