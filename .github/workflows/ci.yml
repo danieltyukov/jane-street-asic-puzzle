@@ -8,11 +8,11 @@ jobs:
   solve:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -20,7 +20,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y iverilog
 
       - name: Cache the SKY130 library
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: pdk
           key: sky130-hd-${{ hashFiles('Makefile') }}
@@ -34,7 +34,7 @@ jobs:
       - name: Full solve
         run: make all
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: results
           path: |
