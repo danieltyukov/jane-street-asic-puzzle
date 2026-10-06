@@ -12,7 +12,7 @@ follow the whole chain: layout, netlist, simulation, understanding, answer.
 git clone --recursive https://github.com/danieltyukov/jane-street-asic-puzzle
 cd jane-street-asic-puzzle
 make setup pdk     # Python venv + the SKY130 HD standard cell library (via ciel)
-make all           # runs the full solve in about 15 seconds
+make all           # the full solve: about 15 s, plus 90 s if Magic is installed
 ```
 
 <details>

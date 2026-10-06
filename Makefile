@@ -3,7 +3,9 @@
 PYTHON  ?= python3
 VENV    ?= .venv
 BIN     := $(VENV)/bin
-PDK_ROOT ?= $(CURDIR)/pdk
+# Deliberately not called PDK_ROOT: many machines export that for other PDKs,
+# and this project keeps its own copy next to the code.
+SKY130_ROOT ?= $(CURDIR)/pdk
 # open_pdks build of SKY130 that ciel can download; the cell library has not
 # changed between recent builds, any of them works
 PDK_VERSION ?= 0fe599b2afb6708d281543108caf8310912f54af
@@ -29,7 +31,7 @@ puzzle:
 	git submodule update --init
 
 pdk: setup
-	$(BIN)/ciel enable --pdk-family sky130 --pdk-root $(PDK_ROOT) \
+	$(BIN)/ciel enable --pdk-family sky130 --pdk-root $(SKY130_ROOT) \
 		--include-libraries sky130_fd_sc_hd $(PDK_VERSION)
 
 all: setup
