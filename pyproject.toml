@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asicre"
+version = "1.0.0"
+description = "Reverse-engineering toolkit and full solution for the Jane Street 2026 ASIC puzzle"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Daniel Tyukov" }]
+requires-python = ">=3.10"
+dependencies = [
+  "klayout>=0.29",
+  "z3-solver>=4.12",
+  "matplotlib>=3.7",
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ciel>=2"]
+
+[project.scripts]
+asicre = "asicre.cli:main"
+
+[project.urls]
+Puzzle = "https://blog.janestreet.com/can-you-reverse-engineer-an-asic/"
+Results = "https://blog.janestreet.com/asic-puzzle-results/"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
